@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的專屬越野路線圖</title>
+    <title>越野路線圖</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: sans-serif; margin: 15px; text-align: center; background-color: #ffffff; }
@@ -97,10 +97,10 @@
                         // 加入 3 公尺的過濾門檻來消除雜訊
                         if (hasElevationData && lastStableEle !== null) {
                             let eleDiff = ele - lastStableEle;
-                            if (eleDiff >= 3) {
+                            if (eleDiff >= 5) {
                                 totalAsc += eleDiff;
                                 lastStableEle = ele; // 更新穩定的高點
-                            } else if (eleDiff <= -3) {
+                            } else if (eleDiff <= -5) {
                                 totalDesc += Math.abs(eleDiff);
                                 lastStableEle = ele; // 更新穩定的低點
                             }
