@@ -1,118 +1,41 @@
-<!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的專屬越野路線圖</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        body { font-family: sans-serif; margin: 20px; text-align: center; }
-        #map { height: 400px; width: 100%; margin-top: 20px; border-radius: 8px; }
-        #chart-container { width: 100%; margin-top: 20px; }
-        .upload-btn {
-            background-color: #D31145; color: white;
-            padding: 10px 20px; border: none; border-radius: 5px;
-            cursor: pointer; font-size: 16px;
-        }
-    </style>
-</head>
-<body>
-
-    <h2>上傳 GPX 檔案查看路線與海拔</h2>
-    <input type="file" id="gpxFileInput" accept=".gpx" class="upload-btn">
-
-    <div id="map"></div>
+// 解析 GPX 檔案數據 (加入自動偵測海拔功能)
+function parseGPX(gpxText) {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(gpxText, "text/xml");
+    const trkpts = xmlDoc.getElementsByTagName("trkpt");
     
-    <div id="chart-container">
-        <canvas id="elevationChart"></canvas>
-    </div>
+    let latlngs = [];
+    let elevations = [];
+    let labels = [];
+    let hasElevationData = false; // 新增：用來記錄是否找到海拔數據
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <script>
-        // 初始化地圖，預設中心點設在香港
-        let map = L.map('map').setView([22.3193, 114.1694], 11);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        let polyline;
-        let elevationChart;
-
-        // 監聽檔案上傳事件
-        document.getElementById('gpxFileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const gpxText = event.target.result;
-                parseGPX(gpxText);
-            };
-            reader.readAsText(file);
-        });
-
-        // 解析 GPX 檔案數據
-        function parseGPX(gpxText) {
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(gpxText, "text/xml");
-            const trkpts = xmlDoc.getElementsByTagName("trkpt");
-            
-            let latlngs = [];
-            let elevations = [];
-            let labels = [];
-
-            for (let i = 0; i < trkpts.length; i++) {
-                let lat = parseFloat(trkpts[i].getAttribute("lat"));
-                let lon = parseFloat(trkpts[i].getAttribute("lon"));
-                let eleNode = trkpts[i].getElementsByTagName("ele")[0];
-                let ele = eleNode ? parseFloat(eleNode.textContent) : 0;
-
-                latlngs.push([lat, lon]);
-                elevations.push(ele);
-                labels.push(i); // 暫時用點位序號作為 X 軸
-            }
-
-            drawMap(latlngs);
-            drawChart(labels, elevations);
+    for (let i = 0; i < trkpts.length; i++) {
+        let lat = parseFloat(trkpts[i].getAttribute("lat"));
+        let lon = parseFloat(trkpts[i].getAttribute("lon"));
+        
+        // 尋找海拔標籤
+        let eleNode = trkpts[i].getElementsByTagName("ele")[0];
+        let ele = 0;
+        
+        // 如果找到海拔數據，就把變數設為 true，並取出數值
+        if (eleNode && eleNode.textContent) {
+            ele = parseFloat(eleNode.textContent);
+            hasElevationData = true; 
         }
 
-        // 在地圖上畫出軌跡
-        function drawMap(latlngs) {
-            if (polyline) map.removeLayer(polyline);
-            polyline = L.polyline(latlngs, {color: '#513D47', weight: 4}).addTo(map);
-            map.fitBounds(polyline.getBounds()); // 自動縮放至路線範圍
-        }
+        latlngs.push([lat, lon]);
+        elevations.push(ele);
+        labels.push(i); 
+    }
 
-        // 繪製海拔剖面圖
-        function drawChart(labels, elevations) {
-            const ctx = document.getElementById('elevationChart').getContext('2d');
-            if (elevationChart) elevationChart.destroy(); // 清除舊圖表
+    drawMap(latlngs);
 
-            elevationChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '海拔高度 (m)',
-                        data: elevations,
-                        borderColor: '#D31145',
-                        backgroundColor: 'rgba(211, 17, 69, 0.2)',
-                        borderWidth: 2,
-                        fill: true,
-                        pointRadius: 0 // 隱藏數據點讓線條更平滑
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: { display: false }, // 隱藏 X 軸點位數字使圖表簡潔
-                        y: { title: { display: true, text: '海拔 (m)' } }
-                    }
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+    // 如果整條路線都沒有海拔數據，就跳出提示框提醒
+    if (!hasElevationData) {
+        alert("溫馨提示：這個 GPX 檔案裡沒有包含海拔數據喔！" + 
+              "這通常是因為路線是手動繪製的平面路線。" + 
+              "海拔圖將會顯示為平線。");
+    }
+    
+    drawChart(labels, elevations);
+}
