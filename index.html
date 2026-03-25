@@ -8,17 +8,9 @@
     <style>
         body { font-family: sans-serif; margin: 15px; text-align: center; background-color: #ffffff; }
         .btn-group { margin: 15px 0; }
-        .btn { 
-            background-color: #D31145; color: white; padding: 10px 15px; 
-            border: none; border-radius: 5px; cursor: pointer; 
-            font-size: 14px; margin: 5px; 
-        }
+        .btn { background-color: #D31145; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin: 5px; }
         .btn:hover { background-color: #b00e39; }
-        #stats-container { 
-            display: flex; justify-content: center; gap: 15px; margin-top: 15px; 
-            font-size: 16px; font-weight: bold; color: #513D47; 
-            background-color: #f9f9f9; padding: 15px; border-radius: 8px; flex-wrap: wrap; 
-        }
+        #stats-container { display: flex; justify-content: center; gap: 15px; margin-top: 15px; font-size: 16px; font-weight: bold; color: #513D47; background-color: #f9f9f9; padding: 15px; border-radius: 8px; flex-wrap: wrap; }
         .stat-item span { color: #D31145; font-size: 20px; }
         #map { height: 400px; width: 100%; margin-top: 15px; border-radius: 8px; z-index: 1; }
         #chart-container { width: 100%; margin-top: 15px; background: white; padding: 10px; box-sizing: border-box; }
@@ -26,19 +18,16 @@
 </head>
 <body>
     <h2>上傳 GPX 檔案查看路線與海拔</h2>
-    
     <div class="btn-group">
         <input type="file" id="gpxFileInput" accept=".gpx" class="btn" style="background-color: #513D47;">
         <button class="btn" onclick="exportMap()">匯出地圖</button>
         <button class="btn" onclick="exportChart()">匯出海拔圖</button>
     </div>
-    
     <div id="stats-container" style="display: none;">
         <div class="stat-item">總距離: <span id="total-dist">0</span> km</div>
         <div class="stat-item">總攀升: <span id="total-asc">0</span> m</div>
         <div class="stat-item">總下降: <span id="total-desc">0</span> m</div>
     </div>
-    
     <div id="map"></div>
     <div id="chart-container">
         <canvas id="elevationChart"></canvas>
@@ -49,12 +38,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <script>
-        // 確保網頁基礎架構載入後，才開始執行功能，避免白畫面
         document.addEventListener("DOMContentLoaded", function() {
             let map = L.map('map', {preferCanvas: true}).setView([22.3193, 114.1694], 11);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-                attribution: '© OpenStreetMap', 
-                crossOrigin: 'anonymous' 
+                attribution: '© OpenStreetMap', crossOrigin: 'anonymous' 
             }).addTo(map);
 
             let polyline;
@@ -84,16 +71,20 @@
                 const trkpts = xmlDoc.getElementsByTagName("trkpt");
                 let latlngs = [], elevations = [], labels = [];
                 let hasElevationData = false, totalDist = 0, totalAsc = 0, totalDesc = 0;
+                let lastStableEle = null; // 用來記錄上一個「穩定」的海拔點
                 
                 for (let i = 0; i < trkpts.length; i++) {
                     let lat = parseFloat(trkpts[i].getAttribute("lat"));
                     let lon = parseFloat(trkpts[i].getAttribute("lon"));
                     let eleNode = trkpts[i].getElementsByTagName("ele")[0];
                     let ele = 0;
+                    
                     if (eleNode && eleNode.textContent) {
                         ele = parseFloat(eleNode.textContent);
                         hasElevationData = true; 
+                        if (lastStableEle === null) lastStableEle = ele; // 記錄起點海拔
                     }
+                    
                     latlngs.push([lat, lon]);
                     elevations.push(ele);
                     labels.push(i);
@@ -102,11 +93,17 @@
                         let prevLat = parseFloat(trkpts[i-1].getAttribute("lat"));
                         let prevLon = parseFloat(trkpts[i-1].getAttribute("lon"));
                         totalDist += calcDistance(prevLat, prevLon, lat, lon);
-                        if (hasElevationData) {
-                            let prevEle = elevations[i-1];
-                            let eleDiff = ele - prevEle;
-                            if (eleDiff > 0) totalAsc += eleDiff;
-                            else if (eleDiff < 0) totalDesc += Math.abs(eleDiff);
+                        
+                        // 加入 3 公尺的過濾門檻來消除雜訊
+                        if (hasElevationData && lastStableEle !== null) {
+                            let eleDiff = ele - lastStableEle;
+                            if (eleDiff >= 3) {
+                                totalAsc += eleDiff;
+                                lastStableEle = ele; // 更新穩定的高點
+                            } else if (eleDiff <= -3) {
+                                totalDesc += Math.abs(eleDiff);
+                                lastStableEle = ele; // 更新穩定的低點
+                            }
                         }
                     }
                 }
@@ -154,9 +151,7 @@
                             data: elevations,
                             borderColor: '#D31145',
                             backgroundColor: 'rgba(211, 17, 69, 0.2)',
-                            borderWidth: 2,
-                            fill: true,
-                            pointRadius: 0
+                            borderWidth: 2, fill: true, pointRadius: 0
                         }]
                     },
                     options: {
@@ -168,12 +163,9 @@
                 });
             }
 
-            // 綁定匯出按鈕功能到全域，確保按鈕點擊有效
             window.exportMap = function() {
                 html2canvas(document.getElementById('map'), {
-                    useCORS: true,
-                    allowTaint: false,
-                    backgroundColor: null
+                    useCORS: true, allowTaint: false, backgroundColor: null
                 }).then(canvas => {
                     let link = document.createElement('a');
                     link.download = 'my_trail_map.png';
