@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>越野路線圖</title>
+    <title>我的專屬越野路線圖</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: sans-serif; margin: 15px; text-align: center; background-color: #ffffff; }
@@ -69,9 +69,9 @@
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(gpxText, "text/xml");
                 const trkpts = xmlDoc.getElementsByTagName("trkpt");
-                let latlngs = [], elevations = [], labels = [];
+                let latlngs = [], chartData = [];
                 let hasElevationData = false, totalDist = 0, totalAsc = 0, totalDesc = 0;
-                let lastStableEle = null; // 用來記錄上一個「穩定」的海拔點
+                let lastStableEle = null;
                 
                 for (let i = 0; i < trkpts.length; i++) {
                     let lat = parseFloat(trkpts[i].getAttribute("lat"));
@@ -82,30 +82,30 @@
                     if (eleNode && eleNode.textContent) {
                         ele = parseFloat(eleNode.textContent);
                         hasElevationData = true; 
-                        if (lastStableEle === null) lastStableEle = ele; // 記錄起點海拔
+                        if (lastStableEle === null) lastStableEle = ele;
                     }
                     
                     latlngs.push([lat, lon]);
-                    elevations.push(ele);
-                    labels.push(i);
                     
                     if (i > 0) {
                         let prevLat = parseFloat(trkpts[i-1].getAttribute("lat"));
                         let prevLon = parseFloat(trkpts[i-1].getAttribute("lon"));
                         totalDist += calcDistance(prevLat, prevLon, lat, lon);
                         
-                        // 加入 3 公尺的過濾門檻來消除雜訊
                         if (hasElevationData && lastStableEle !== null) {
                             let eleDiff = ele - lastStableEle;
-                            if (eleDiff >= 5) {
+                            if (eleDiff >= 3) {
                                 totalAsc += eleDiff;
-                                lastStableEle = ele; // 更新穩定的高點
-                            } else if (eleDiff <= -5) {
+                                lastStableEle = ele;
+                            } else if (eleDiff <= -3) {
                                 totalDesc += Math.abs(eleDiff);
-                                lastStableEle = ele; // 更新穩定的低點
+                                lastStableEle = ele;
                             }
                         }
                     }
+                    
+                    // 將累計距離作為 X 座標，海拔作為 Y 座標存入圖表資料中
+                    chartData.push({ x: totalDist, y: ele });
                 }
                 
                 document.getElementById('stats-container').style.display = 'flex';
@@ -118,7 +118,7 @@
                 if (!hasElevationData && trkpts.length > 0) {
                     alert("溫馨提示：這個 GPX 檔案裡沒有包含海拔數據。海拔圖與總攀升將顯示為 0。");
                 }
-                drawChart(labels, elevations);
+                drawChart(chartData);
             }
 
             function drawMap(latlngs) {
@@ -139,25 +139,53 @@
                 }
             };
 
-            function drawChart(labels, elevations) {
+            function drawChart(chartData) {
                 const ctx = document.getElementById('elevationChart').getContext('2d');
                 if (elevationChart) elevationChart.destroy();
+                
+                // 改用 scatter 類型並設定 showLine，這樣可以完美支援 X 軸的真實線性距離
                 elevationChart = new Chart(ctx, {
-                    type: 'line',
+                    type: 'scatter',
                     data: {
-                        labels: labels,
                         datasets: [{
                             label: '海拔高度 (m)',
-                            data: elevations,
+                            data: chartData,
                             borderColor: '#D31145',
                             backgroundColor: 'rgba(211, 17, 69, 0.2)',
-                            borderWidth: 2, fill: true, pointRadius: 0
+                            borderWidth: 2, 
+                            fill: true, 
+                            pointRadius: 0,
+                            showLine: true 
                         }]
                     },
                     options: {
                         responsive: true,
-                        scales: { x: { display: false }, y: { title: { display: true, text: '海拔 (m)' } } },
-                        plugins: { customCanvasBackgroundColor: { color: 'white' } }
+                        scales: { 
+                            x: { 
+                                type: 'linear',
+                                display: true, 
+                                title: { display: true, text: '距離 (km)' },
+                                ticks: {
+                                    stepSize: 1, // 強制每一公里一格
+                                    callback: function(value) {
+                                        return value + ' km'; // 加上單位
+                                    }
+                                }
+                            }, 
+                            y: { 
+                                title: { display: true, text: '海拔 (m)' } 
+                            } 
+                        },
+                        plugins: { 
+                            customCanvasBackgroundColor: { color: 'white' },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `距離: ${context.parsed.x.toFixed(2)} km, 海拔: ${context.parsed.y} m`;
+                                    }
+                                }
+                            }
+                        }
                     },
                     plugins: [customCanvasBackgroundColor]
                 });
